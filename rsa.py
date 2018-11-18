@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import random
+from time import clock
 
 
 def randnumber(nbits):
@@ -173,26 +174,94 @@ def decrypt(c, N, d):
     return pow(c, d, N)
 
 
+def generate_rsa_crt(nbit):
+    """
+    生成 nbit 位的rsa密钥, 增加dP, dQ, qInv
+    """
+    e = 65537
+    ntests = 50
+
+    np = nbit / 2
+    nq = nbit - np
+    p = generate_rsa_prime(np, e, ntests)
+    q = generate_rsa_prime(nq, e, ntests)
+
+    assert(p != q and p > 0 and q > 0)
+
+    N = p * q
+    L = (p-1) * (q-1)
+    d = modinv(e, L)
+
+    dP = d % (p-1)
+    dQ = d % (q-1)
+    qInv = modinv(q, p)
+
+    print "N:", hex(N)
+    print "p:", hex(p)
+    print "q:", hex(q)
+    print "e:", e
+    print "d:", hex(d)
+    print "dP:", hex(dP)
+    print "dQ:", hex(dQ)
+    print "qInv:", hex(qInv)
+
+    return (N, e, d, p, q, dP, dQ, qInv)
+
+
+def decrypt_crt(c, dP, dQ, qInv, p, q, d):
+    """
+    CRT方法解密
+    """
+    m1 = pow(c, dP, p)
+    m2 = pow(c, dQ, q)
+    h = (qInv * (m1 - m2)) % p
+    m = m2 + h * q
+    return m
+
+
+def test_compare_crt(N, e, d, p, q, dP, dQ, qInv):
+    """
+    测试-CRT优化后解密效率和优化前效率
+    """
+    num = 50
+    raw_data = range(0, num)
+    encrypted_data = []
+    for m in raw_data :
+        encrypted_data.append(encrypt(m, N, e))
+
+    s = clock()
+    for i in xrange(0, num):
+        c = encrypted_data[i]
+        m = decrypt_crt(c, dP, dQ, qInv, p, q, d)
+        assert m == raw_data[i]
+    crt_clock = clock()-s
+
+    s = clock()
+    for i in xrange(0, num):
+        c = encrypted_data[i]
+        m = decrypt(c, N, d)
+        assert m == raw_data[i]
+    basic_clock = clock()-s
+
+    print "Test RSA, decrypt crt:%s, normal:%s" % (crt_clock, basic_clock)
+
+
 def test_rsa(N, e, d):
     """
     测试RSA加密解密
     """
-    for m in xrange(2, 30):
+    for m in xrange(1, 30):
         m_ = decrypt(encrypt(m, N, e), N, d)
         assert m == m_
-    print "success"
+    print "\nTest RSA basic: passed"
 
 
-def parse_args():
+if __name__ == '__main__':
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("-b", "--bits", dest="bits", type=int,
                       help="rsa key bits", default=512)
     (options, _) = parser.parse_args()
-    return options
-
-
-if __name__ == '__main__':
-    options = parse_args()
-    key = generate_rsa(options.bits)
-    test_rsa(*key)
+    (N, e, d, p, q, dP, dQ, qInv) = generate_rsa_crt(options.bits)
+    test_rsa(N, e, d)
+    test_compare_crt(N, e, d, p, q, dP, dQ, qInv)
