@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import random
-import math
 from time import clock
 
 
@@ -123,8 +122,12 @@ def modinv(e, L):
     x, y, z = ext_gcd(e, L)
 
     if x < 0:
-        k = int(math.ceil(float(abs(x)) / L))
+        k = abs(x) / L
+        r = abs(x) % L
+        if r != 0:
+            k += 1
         x += (k * L)
+        y -= (k * e)
 
     return x
 
